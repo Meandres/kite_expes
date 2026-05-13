@@ -1,0 +1,52 @@
+{
+  "queries": {
+    "scan_q1": {
+      "sql_file": "queries/tpch/q01.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "scan_q6": {
+      "sql_file": "queries/tpch/q06.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "scan_q12": {
+      "sql_file": "queries/tpch/q12.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "compute_q5": {
+      "sql_file": "queries/tpch/q05.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "compute_q9": {
+      "sql_file": "queries/tpch/q09.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "compute_q18": {
+      "sql_file": "queries/tpch/q18.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    }
+  },
+
+  "client_types": {
+    "scanner": {
+      "queries": ["scan_q1", "scan_q6", "scan_q12"],
+      "order": "sequential",
+      "inter_query_delay": { "distribution": "immediate" },
+      "rounds": 0
+    },
+    "compute_client": {
+      "queries": ["compute_q5", "compute_q9", "compute_q18"],
+      "order": "sequential",
+      "inter_query_delay": { "distribution": "fixed", "value_ms": 1000 },
+      "rounds": 0
+    }
+  },
+
+  "simulation": {
+    "clients": [
+      { "type": "scanner",        "count": 2 },
+      { "type": "compute_client", "count": 6 }
+    ],
+    "seed": 42,
+    "max_duration_s": 120
+  }
+}

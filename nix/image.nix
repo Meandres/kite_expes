@@ -91,7 +91,7 @@ in
 	  selfpkgs.vmcache
     selfpkgs.mmapbench
     pkgs.just
-    perf
+    kernelPackages.perf
     resize
     pkgs.spdk
     pkgs.bpftrace

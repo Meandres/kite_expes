@@ -76,7 +76,7 @@
 
                         libaio
                         niwa-pkgs.driverctl
-			postgresql
+			                  postgresql
 
                         # leanstore
                         gflags
@@ -90,6 +90,9 @@
                         mysql80
                         libmysqlconnectorcpp
 
+                        unstable-pkgs.duckdb
+                        nlohmann_json
+			flamegraph
                     ];
                     nativeBuildInputs = with pkgs; [
                     ];

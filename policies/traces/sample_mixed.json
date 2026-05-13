@@ -1,0 +1,63 @@
+{
+  "queries": {
+    "q01_small": {
+      "sql_file": "queries/tpch/q01.sql",
+      "variables": { "source": "/scratch/ilya/tpch30" }
+    },
+    "q06_small": {
+      "sql_file": "queries/tpch/q06.sql",
+      "variables": { "source": "/scratch/ilya/tpch30" }
+    },
+    "q01_large": {
+      "sql_file": "queries/tpch/q01.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "q06_large": {
+      "sql_file": "queries/tpch/q06.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "q12_large": {
+      "sql_file": "queries/tpch/q12.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    },
+    "q18_large": {
+      "sql_file": "queries/tpch/q18.sql",
+      "variables": { "source": "/scratch/ilya/tpch100" }
+    }
+  },
+
+  "client_types": {
+    "batch_analyst": {
+      "queries": ["q01_large", "q06_large", "q12_large"],
+      "order": "sequential",
+      "inter_query_delay": { "distribution": "immediate" },
+      "rounds": 3
+    },
+    "interactive_explorer": {
+      "queries": ["q01_small", "q06_small", "q01_large", "q06_large"],
+      "order": "random",
+      "inter_query_delay": {
+        "distribution": "uniform",
+        "min_ms": 200,
+        "max_ms": 1000
+      },
+      "rounds": 10
+    },
+    "heavy_joiner": {
+      "queries": ["q18_large"],
+      "order": "sequential",
+      "inter_query_delay": { "distribution": "immediate" },
+      "rounds": 1
+    }
+  },
+
+  "simulation": {
+    "clients": [
+      { "type": "heavy_joiner",        "count": 1 },
+      { "type": "batch_analyst",       "count": 2 },
+      { "type": "interactive_explorer","count": 5 }
+    ],
+    "seed": 42,
+    "max_duration_s": 300
+  }
+}

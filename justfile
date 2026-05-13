@@ -2,7 +2,7 @@ proot := source_dir()
 qemu_ssh_port := "2222"
 user := `whoami`
 rep := '1'
-ssd_id := '84:00.0'
+ssd_id := 'c5:00.0'
 
 mod motiv "motivation/motiv.just"
 
@@ -28,6 +28,7 @@ linux_vm nb_cpu="1" size_mem="16384":
         -smp {{nb_cpu}} \
         -enable-kvm \
         -m {{size_mem}} \
+        -device vfio-pci,host={{ssd_id}} \
         -machine q35,accel=kvm,kernel-irqchip=split \
         -device intel-iommu,intremap=on,device-iotlb=on,caching-mode=on \
         -device virtio-serial \
@@ -40,8 +41,7 @@ linux_vm nb_cpu="1" size_mem="16384":
         -drive file={{proot}}/VMs/linux-image.qcow2 \
         -net nic,netdev=user.0,model=virtio \
         -netdev user,id=user.0,hostfwd=tcp:127.0.0.1:{{qemu_ssh_port}}-:22 \
-        -nographic #\
-        #-device vfio-pci,host={{ssd_id}}
+        -nographic
 
 linux-image-init:
     #!/usr/bin/env bash
@@ -58,3 +58,8 @@ linux-image-init:
 
     nix build .#linux-image --out-link {{proot}}/VMs/ro
     overwrite linux-image
+
+change_tpch_query_location dir='/scratch/ilya/tpch300/':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    find . -name "*.sql" -type f -exec sed -i "s|'[^']*/\([^/]*\.parquet\)'|'{{dir}}/\1'|g" {} +
