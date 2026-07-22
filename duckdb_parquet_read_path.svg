@@ -1,0 +1,246 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="1968" viewBox="0 0 1420 1968" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#5f6368"/>
+    </marker>
+    <marker id="arrowteal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#0E7490"/>
+    </marker>
+  </defs>
+  <rect width="1420" height="1968" fill="#ffffff"/>
+
+  <!-- ================= Header ================= -->
+  <text x="40" y="46" font-size="22" font-weight="700" fill="#1a1a1a">Parquet read &amp; decode path in DuckDB — remote (cache_httpfs) vs. local vs. proposed unikernel cache</text>
+  <text x="40" y="72" font-size="13" fill="#5f6368">DuckDB v1.5.4 + duck-read-cache-fs · all caches below layer 2 hold raw compressed bytes — decoding is redone every scan · ⚠ = implicit cache that silently warms baselines · ★ = proposed</text>
+
+  <!-- ================= L1: operator ================= -->
+  <rect x="40" y="100" width="1340" height="100" rx="8" fill="#EDF2FB" stroke="#3D5A99" stroke-width="1.5"/>
+  <text x="60" y="128" font-size="15" font-weight="700" fill="#26365c">1 · Table scan operator — read_parquet()</text>
+  <text x="60" y="152" font-size="12.5" fill="#333">ParquetScanImplementation (parquet_extension.cpp) pulls one DataChunk (≤ 2048 rows) per call · row groups distributed across threads</text>
+  <text x="60" y="172" font-size="12.5" fill="#333">ParquetReader::InitializeScan / Scan (parquet_reader.cpp:1290) · one ColumnReader tree per file</text>
+
+  <line x1="710" y1="200" x2="710" y2="222" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ================= L2: decode ================= -->
+  <rect x="40" y="224" width="1340" height="150" rx="8" fill="#FBF0DE" stroke="#B07C2A" stroke-width="1.5"/>
+  <text x="60" y="252" font-size="15" font-weight="700" fill="#6e4c12">2 · Column decode — ColumnReader (column_reader.cpp) — CPU work, above all byte caches</text>
+  <text x="60" y="276" font-size="12.5" fill="#333">Footer: ThriftFileTransport decodes thrift metadata → row-group / column-chunk offsets (⚠ parquet_metadata_cache keeps parsed footers, default off)</text>
+  <text x="60" y="296" font-size="12.5" fill="#333">Per column chunk: fetch page bytes → DecompressInternal — snappy / zstd / gzip / lz4 / brotli (column_reader.cpp:409)</text>
+  <text x="60" y="316" font-size="12.5" fill="#333">→ decode PLAIN / DICTIONARY / RLE / DELTA (decoder/) → filter pushdown &amp; row-id selection → DuckDB Vectors</text>
+  <rect x="60" y="332" width="960" height="26" rx="13" fill="#FDE7E9"/>
+  <text x="78" y="349" font-size="12" font-weight="600" fill="#B3261E">Decoded pages are never cached — every scan pays decode again ⇒ warm-run floor ≈ decode CPU time; no byte cache can go below it</text>
+
+  <line x1="710" y1="374" x2="710" y2="396" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ================= L3: parquet IO ================= -->
+  <rect x="40" y="398" width="1340" height="118" rx="8" fill="#EDF6ED" stroke="#4C8055" stroke-width="1.5"/>
+  <text x="60" y="426" font-size="15" font-weight="700" fill="#2c5233">3 · Parquet IO planning — ThriftFileTransport + ReadAheadBuffer (thrift_tools.hpp)</text>
+  <text x="60" y="450" font-size="12.5" fill="#333">PrepareRowGroupBuffer (parquet_reader.cpp:1192) registers needed column-chunk byte ranges → merges ranges with gaps ≤ 16 KiB → Prefetch()</text>
+  <text x="60" y="470" font-size="12.5" fill="#333">Footer read sized by guess: file_size/1000, clamped to [16 KiB, 256 KiB] — saves remote round-trips</text>
+  <text x="60" y="490" font-size="12.5" fill="#333">Prefetch is ON for remote files, OFF for local (unless prefetch_all_parquet_files) · disable via disable_parquet_prefetching</text>
+
+  <!-- fork: proposed path vs current path -->
+  <path d="M 710 516 L 710 530 L 200 530 L 200 552" fill="none" stroke="#0E7490" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowteal)"/>
+  <path d="M 710 516 L 710 530 L 890 530 L 890 552" fill="none" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="212" y="547" font-size="12" font-weight="600" fill="#0E7490">★ uCache: replaces read() calls here</text>
+  <text x="902" y="547" font-size="12" font-weight="600" fill="#5f6368">current path</text>
+
+  <!-- ================= uCache column (proposed) ================= -->
+  <rect x="40" y="554" width="320" height="234" rx="8" fill="#E0F7FA" stroke="#0E7490" stroke-width="2" stroke-dasharray="7 4"/>
+  <text x="58" y="582" font-size="15" font-weight="700" fill="#155E63">★ uCache</text>
+  <text x="58" y="606" font-size="12.5" fill="#333">layer-3 fetches become memcpy</text>
+  <text x="58" y="626" font-size="12.5" fill="#333">from an mmap'd shared region</text>
+  <text x="58" y="646" font-size="12.5" fill="#333">(or zero-copy pinned pointers)</text>
+  <text x="58" y="666" font-size="12.5" fill="#333">no syscall on hit · bypasses 4–8</text>
+  <text x="58" y="690" font-size="12.5" fill="#333">misses filled by the unikernel:</text>
+  <text x="58" y="710" font-size="12.5" fill="#333">own IO stack (virtio / SPDK-style</text>
+  <text x="58" y="730" font-size="12.5" fill="#333">NVMe, net) · admission + eviction</text>
+  <text x="58" y="750" font-size="12.5" fill="#333">policy yours</text>
+  <text x="58" y="774" font-size="11.5" font-style="italic" fill="#155E63">baseline hygiene: disable EFC (layer 4)</text>
+
+  <line x1="200" y1="788" x2="200" y2="1228" stroke="#0E7490" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowteal)"/>
+  <text x="212" y="1020" font-size="12" font-weight="600" fill="#0E7490">unikernel-owned IO</text>
+  <text x="212" y="1038" font-size="11.5" fill="#0E7490">(kernel + page cache bypassed)</text>
+
+  <rect x="40" y="1230" width="320" height="52" rx="8" fill="#155E63"/>
+  <text x="200" y="1252" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Backing store — NVMe / network</text>
+  <text x="200" y="1271" font-size="11.5" fill="#B2EBF2" text-anchor="middle">no OS page cache in this path</text>
+
+  <!-- ================= L4: ExternalFileCache (current path) ================= -->
+  <rect x="400" y="554" width="980" height="146" rx="8" fill="#E8F1EE" stroke="#2F7D6D" stroke-width="1.5"/>
+  <text x="420" y="582" font-size="15" font-weight="700" fill="#1d4f44">4 · DuckDB ExternalFileCache — CachingFileHandle (caching_file_system.cpp)</text>
+  <text x="420" y="606" font-size="12.5" fill="#333">Parquet always opens via CachingFileSystem::Get (parquet_reader.cpp:871), local and remote · full hit = zero-copy (pinned buffer)</text>
+  <text x="420" y="626" font-size="12.5" fill="#333">Byte ranges pinned in BufferManager memory · gap-fill merge ≤ 1 MiB · validated per open (mtime / ETag)</text>
+  <text x="420" y="646" font-size="12.5" fill="#333">Shares memory_limit with the query; evicted first under pressure (dropped, re-read)</text>
+  <rect x="420" y="660" width="660" height="26" rx="13" fill="#FDE7E9"/>
+  <text x="438" y="677" font-size="12" font-weight="600" fill="#B3261E">Disabled by cache_httpfs at load — SET enable_external_file_cache=true to re-enable</text>
+
+  <line x1="890" y1="700" x2="890" y2="726" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ================= L5: VFS ================= -->
+  <rect x="400" y="728" width="980" height="52" rx="8" fill="#F1F0F6" stroke="#6B6485" stroke-width="1.5"/>
+  <text x="420" y="760" font-size="15" font-weight="700" fill="#3e3a52">5 · VirtualFileSystem::FindFileSystem(path) <tspan font-weight="400" font-size="12.5" fill="#333">— dispatch by CanHandleFile(); cache_httpfs swaps in its wrapper</tspan></text>
+
+  <!-- branch arrows -->
+  <path d="M 890 780 L 890 794 L 680 794 L 680 816" fill="none" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M 890 780 L 890 794 L 1185 794 L 1185 816" fill="none" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="668" y="810" font-size="12" font-weight="600" fill="#C05621" text-anchor="end">s3:// · http(s):// · hf://</text>
+  <text x="1205" y="810" font-size="12" font-weight="600" fill="#546E7A">local path</text>
+
+  <!-- ================= Remote column ================= -->
+  <rect x="400" y="818" width="560" height="110" rx="8" fill="#FDECE4" stroke="#C05621" stroke-width="1.5"/>
+  <text x="420" y="846" font-size="15" font-weight="700" fill="#7a3413">6a · cache_httpfs CacheFileSystem (cache_filesystem.cpp)</text>
+  <text x="420" y="870" font-size="12.5" fill="#333">metadata LRU (no HEAD) · file-handle LRU (no re-open/TLS) · glob LRU (no LIST)</text>
+  <text x="420" y="890" font-size="12.5" fill="#333">ReadImpl (:602): align request to 512 KiB blocks → one parallel task per block</text>
+  <text x="420" y="910" font-size="12.5" fill="#333">(thread pool or DuckDB TaskScheduler) · exclusion regexes bypass cache</text>
+
+  <line x1="680" y1="928" x2="680" y2="948" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="400" y="950" width="560" height="126" rx="8" fill="#FDECE4" stroke="#C05621" stroke-width="1.5"/>
+  <text x="420" y="978" font-size="15" font-weight="700" fill="#7a3413">7a · DiskCacheReader (cache_httpfs_type = on_disk, default)</text>
+  <rect x="420" y="992" width="250" height="46" rx="6" fill="#fff" stroke="#C05621" stroke-width="1"/>
+  <text x="434" y="1011" font-size="12" font-weight="600" fill="#7a3413">L1 · in-memory LRU</text>
+  <text x="434" y="1029" font-size="11.5" fill="#333">256 × 512 KiB · 30 min TTL</text>
+  <rect x="690" y="992" width="250" height="46" rx="6" fill="#fff" stroke="#C05621" stroke-width="1"/>
+  <text x="704" y="1011" font-size="12" font-weight="600" fill="#7a3413">L2 · on-disk files (persistent)</text>
+  <text x="704" y="1029" font-size="11.5" fill="#333">sha256-offset-len · atomic rename</text>
+  <text x="420" y="1062" font-size="11.5" fill="#555" font-style="italic">in_mem: L1 only · noop: pass-through · ⚠ L2 re-reads are served via OS page cache</text>
+
+  <line x1="680" y1="1076" x2="680" y2="1096" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="692" y="1091" font-size="12" font-weight="600" fill="#5f6368">block miss</text>
+
+  <rect x="400" y="1098" width="560" height="110" rx="8" fill="#F5EAF7" stroke="#8E44AD" stroke-width="1.5"/>
+  <text x="420" y="1126" font-size="15" font-weight="700" fill="#5b2c6f">8a · httpfs — S3FileSystem / HTTPFileSystem (s3fs.cpp, httpfs.cpp)</text>
+  <text x="420" y="1150" font-size="12.5" fill="#333">SigV4 sign → HTTP GET Range: bytes=off–end (httpfs.cpp:287) · LIFO conn pool</text>
+  <text x="420" y="1170" font-size="12.5" fill="#333">PARALLEL_ACCESS ⇒ httpfs' own 1–32 MiB read buffer is skipped</text>
+  <text x="420" y="1192" font-size="11.5" fill="#5b2c6f">⚠ httpfs-internal metadata cache + full-download-below-threshold path stay active</text>
+
+  <line x1="680" y1="1208" x2="680" y2="1228" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="400" y="1230" width="560" height="52" rx="8" fill="#37474F"/>
+  <text x="680" y="1262" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Object storage — S3 / GCS / HTTP (network, egress-billed)</text>
+
+  <!-- ================= Local column ================= -->
+  <rect x="990" y="818" width="390" height="110" rx="8" fill="#ECEFF1" stroke="#546E7A" stroke-width="1.5"/>
+  <text x="1010" y="846" font-size="15" font-weight="700" fill="#37474F">6b · LocalFileSystem (:484)</text>
+  <text x="1010" y="870" font-size="12.5" fill="#333">Positional pread() loop — no user-space</text>
+  <text x="1010" y="890" font-size="12.5" fill="#333">cache, no buffering, no read-ahead</text>
+  <text x="1010" y="910" font-size="12.5" fill="#333">inside DuckDB (local_file_system.cpp)</text>
+
+  <line x1="1185" y1="928" x2="1185" y2="948" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="990" y="950" width="390" height="150" rx="8" fill="#FFF8E1" stroke="#B07C2A" stroke-width="1.5"/>
+  <text x="1010" y="978" font-size="15" font-weight="700" fill="#6e4c12">7b · ⚠ OS page cache + readahead</text>
+  <text x="1010" y="1004" font-size="12.5" fill="#333">every pread() fills the page cache;</text>
+  <text x="1010" y="1024" font-size="12.5" fill="#333">sequential access triggers kernel readahead</text>
+  <text x="1010" y="1052" font-size="11.5" font-style="italic" fill="#555">reset: echo 3 &gt; /proc/sys/vm/drop_caches</text>
+
+  <line x1="1185" y1="1100" x2="1185" y2="1228" stroke="#5f6368" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="1197" y="1168" font-size="12" font-weight="600" fill="#5f6368">page-cache miss</text>
+
+  <rect x="990" y="1230" width="390" height="52" rx="8" fill="#37474F"/>
+  <text x="1185" y="1252" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Local disk (NVMe / SSD)</text>
+  <text x="1185" y="1271" font-size="11.5" fill="#B0BEC5" text-anchor="middle">⚠ + device/controller DRAM cache</text>
+
+  <!-- ================= Config knobs ================= -->
+  <text x="40" y="1360" font-size="18" font-weight="700" fill="#1a1a1a">Configuration knobs</text>
+
+  <text x="40" y="1388" font-size="14" font-weight="700" fill="#7a3413">cache_httpfs extension (remote branch)</text>
+  <g font-size="12">
+    <rect x="40" y="1400" width="1160" height="30" fill="#EDF0F4"/>
+    <text x="56" y="1420" font-weight="700" fill="#333">Setting</text>
+    <text x="540" y="1420" font-weight="700" fill="#333">Default</text>
+    <text x="744" y="1420" font-weight="700" fill="#333">Effect on the path</text>
+
+    <rect x="40" y="1430" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1449" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_type</text>
+    <text x="540" y="1449" fill="#333">on_disk</text>
+    <text x="744" y="1449" fill="#333">reader at layer 7a: on_disk / in_mem / noop (pure httpfs)</text>
+
+    <rect x="40" y="1458" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1477" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_cache_block_size</text>
+    <text x="540" y="1477" fill="#333">512 KiB</text>
+    <text x="744" y="1477" fill="#333">block alignment = fetch granularity = cache key (read amplification!)</text>
+
+    <rect x="40" y="1486" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1505" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_max_fanout_subrequest</text>
+    <text x="540" y="1505" fill="#333">0 (→ cap 1024)</text>
+    <text x="744" y="1505" fill="#333">max parallel range-GETs issued per logical read</text>
+
+    <rect x="40" y="1514" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1533" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_parallel_read_mode</text>
+    <text x="540" y="1533" fill="#333">internal thread pool</text>
+    <text x="744" y="1533" fill="#333">extension's own pool vs. DuckDB TaskScheduler</text>
+
+    <rect x="40" y="1542" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1561" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_enable_cache_validation</text>
+    <text x="540" y="1561" fill="#333">false</text>
+    <text x="744" y="1561" fill="#333">per-block ETag check; default is TTL-based eventual consistency</text>
+
+    <rect x="40" y="1570" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1589" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_enable_{metadata,file_handle,glob}_cache</text>
+    <text x="540" y="1589" fill="#333">true</text>
+    <text x="744" y="1589" fill="#333">dedup of HEAD / open+TLS / LIST requests (layer 6a)</text>
+
+    <rect x="40" y="1598" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1617" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_min_disk_bytes_for_cache</text>
+    <text x="540" y="1617" fill="#333">0 (+ 5% free floor)</text>
+    <text x="744" y="1617" fill="#333">disk-space guard before writing L2 block files</text>
+
+    <rect x="40" y="1626" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1645" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_evict_policy</text>
+    <text x="540" y="1645" fill="#333">creation_timestamp</text>
+    <text x="744" y="1645" fill="#333">L2 eviction: stale-after-1-day vs. in-process LRU (lru_sp)</text>
+
+    <rect x="40" y="1654" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1673" font-family="Menlo, Consolas, monospace" fill="#7a3413">cache_httpfs_disk_cache_reader_enable_memory_cache</text>
+    <text x="540" y="1673" fill="#333">true</text>
+    <text x="744" y="1673" fill="#333">keeps the L1 in-memory tier above disk blocks (+ O_DIRECT reads)</text>
+    <rect x="40" y="1400" width="1160" height="282" fill="none" stroke="#D0D4DA" stroke-width="1"/>
+    <line x1="530" y1="1400" x2="530" y2="1682" stroke="#D0D4DA" stroke-width="1"/>
+    <line x1="734" y1="1400" x2="734" y2="1682" stroke="#D0D4DA" stroke-width="1"/>
+  </g>
+
+  <text x="40" y="1714" font-size="14" font-weight="700" fill="#1d4f44">DuckDB core (parquet + local branch)</text>
+  <g font-size="12">
+    <rect x="40" y="1726" width="1160" height="30" fill="#EDF0F4"/>
+    <text x="56" y="1746" font-weight="700" fill="#333">Setting</text>
+    <text x="540" y="1746" font-weight="700" fill="#333">Default</text>
+    <text x="744" y="1746" font-weight="700" fill="#333">Effect on the path</text>
+
+    <rect x="40" y="1756" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1775" font-family="Menlo, Consolas, monospace" fill="#1d4f44">enable_external_file_cache</text>
+    <text x="540" y="1775" fill="#333">true → forced false</text>
+    <text x="744" y="1775" fill="#333">toggles layer-4 byte-range cache (cache_httpfs turns it off at load)</text>
+
+    <rect x="40" y="1784" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1803" font-family="Menlo, Consolas, monospace" fill="#1d4f44">validate_external_file_cache</text>
+    <text x="540" y="1803" fill="#333">VALIDATE_ALL</text>
+    <text x="744" y="1803" fill="#333">ETag / mtime check on every open (staleness → drop ranges)</text>
+
+    <rect x="40" y="1812" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1831" font-family="Menlo, Consolas, monospace" fill="#1d4f44">memory_limit</text>
+    <text x="540" y="1831" fill="#333">80% of RAM</text>
+    <text x="744" y="1831" fill="#333">shared BufferPool budget; external-file ranges are evicted first</text>
+
+    <rect x="40" y="1840" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1859" font-family="Menlo, Consolas, monospace" fill="#1d4f44">disable_parquet_prefetching</text>
+    <text x="540" y="1859" fill="#333">false</text>
+    <text x="744" y="1859" fill="#333">turns off the layer-3 ReadAheadBuffer entirely</text>
+
+    <rect x="40" y="1868" width="1160" height="28" fill="#ffffff"/>
+    <text x="56" y="1887" font-family="Menlo, Consolas, monospace" fill="#1d4f44">prefetch_all_parquet_files</text>
+    <text x="540" y="1887" fill="#333">false</text>
+    <text x="744" y="1887" fill="#333">enables layer-3 prefetch for local files too (default: remote only)</text>
+
+    <rect x="40" y="1896" width="1160" height="28" fill="#F6F7F9"/>
+    <text x="56" y="1915" font-family="Menlo, Consolas, monospace" fill="#1d4f44">parquet_metadata_cache</text>
+    <text x="540" y="1915" fill="#333">false</text>
+    <text x="744" y="1915" fill="#333">caches parsed footers — skips thrift re-decode at layer 2</text>
+    <rect x="40" y="1726" width="1160" height="198" fill="none" stroke="#D0D4DA" stroke-width="1"/>
+    <line x1="530" y1="1726" x2="530" y2="1924" stroke="#D0D4DA" stroke-width="1"/>
+    <line x1="734" y1="1726" x2="734" y2="1924" stroke="#D0D4DA" stroke-width="1"/>
+  </g>
+
+  <text x="40" y="1952" font-size="11" fill="#8a8f98">File references relative to duck-read-cache-fs/ (extension: src/ · DuckDB core: duckdb/src/, duckdb/extension/parquet/ · httpfs: duckdb-httpfs/src/). ★ = proposed, not in codebase. Generated 2026-07-22.</text>
+</svg>
