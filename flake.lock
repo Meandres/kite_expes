@@ -1,5 +1,30 @@
 {
   "nodes": {
+    "cache-httpfs": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1784736201,
+        "narHash": "sha256-3ez8RFQtb3FPBto6R19EFCou79WZLJPlkOsYuGZVNo8=",
+        "ref": "refs/heads/main",
+        "rev": "e0332cea496b2d13aa655ce0088be2d349bf1256",
+        "revCount": 378,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/Meandres/duck-read-cache-fs"
+      },
+      "original": {
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/Meandres/duck-read-cache-fs"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -158,6 +183,7 @@
     },
     "root": {
       "inputs": {
+        "cache-httpfs": "cache-httpfs",
         "flake-utils": "flake-utils",
         "nixos-generators": "nixos-generators",
         "nixpkgs": "nixpkgs",

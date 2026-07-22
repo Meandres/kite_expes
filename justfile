@@ -5,6 +5,7 @@ rep := '1'
 ssd_id := 'c5:00.0'
 
 mod motiv "motivation/motiv.just"
+mod policies "policies/policies.just"
 
 help:
     just --list

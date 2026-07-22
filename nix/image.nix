@@ -1,5 +1,5 @@
 # This configuration describes a VM image with vmcache and exmap
-{ selfpkgs, lib, pkgs, kernelPackages, extraEnvPackages ? [], ... }:
+{ selfpkgs, lib, pkgs, unstable-pkgs, kernelPackages, extraEnvPackages ? [], ... }:
 with lib;
 let
   resize = pkgs.writeShellScriptBin "resize" ''
@@ -83,6 +83,7 @@ in
   environment.systemPackages = [
     pkgs.vim
 	  pkgs.git
+    pkgs.htop
 	  pkgs.libaio
 	  pkgs.gnumake
 	  pkgs.gnat13
@@ -95,6 +96,8 @@ in
     resize
     pkgs.spdk
     pkgs.bpftrace
+    unstable-pkgs.duckdb
+    selfpkgs.duckdb-bench
   ] ++ extraEnvPackages;
 
   boot.kernelPackages = kernelPackages;

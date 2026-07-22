@@ -1,4 +1,7 @@
 .nix-channels
 .ssh
+.bash_history
+.duckdb_history
+.cache
 VMs
 result
